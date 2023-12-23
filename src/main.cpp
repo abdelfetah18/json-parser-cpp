@@ -25,16 +25,16 @@ int main() {
     std::string input = buffer.str();
 
     // Output the content
-    std::cout << input << std::endl;
+    // std::cout << input << std::endl;
 
     JSONParser parser(input);
     auto value = parser.parse();
 
     if (!value.isError()) {
         std::cout << "Done Lexing." << std::endl;
-        value.value()->print(0);
+        // value.value()->print(0);
     } else {
-        std::cout << "Something went wrong." << std::endl;
+        std::cout << value.errorMessage() << std::endl;
     }
     return 0;
 }

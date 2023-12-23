@@ -43,7 +43,7 @@ bool JSONLexer::isControlChar() {
 }
 
 void JSONLexer::skipWhiteSpace() {
-    while(!isEOF() && isWhiteSpace(current())){
+    while (!isEOF() && isWhiteSpace(current())) {
         advance(1);
     }
 }
@@ -101,7 +101,12 @@ JSONToken *JSONLexer::next() {
         advance(1);
         std::string str;
         while (!isEOF() && !isControlChar() && !match('"')) {
-            str.push_back(current());
+            if (match('\\')) {
+                advance(1);
+                str.push_back(current());
+            }else{
+                str.push_back(current());
+            }
             advance(1);
         }
 

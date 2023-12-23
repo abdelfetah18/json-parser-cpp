@@ -34,7 +34,15 @@ JSONErrorOr<JSONValue*> JSONObject::get(std::string key) {
     if (m_pairs.contains(key)) {
         return m_pairs[key];
     }
-    // TODO: Return Error NotFound.
+
+    std::string errorMessage;
+
+    errorMessage.append("'");
+    errorMessage.append(key);
+    errorMessage.append("'");
+    errorMessage.append(" Not Exist");
+
+    return new JSONError(errorMessage);
 }
 
 void JSONArray::append(JSONValue* value) { m_values.push_back(value); }
@@ -43,8 +51,18 @@ JSONErrorOr<JSONValue*> JSONArray::get(uint64_t index) {
     if (index < m_values.size()) {
         return m_values[index];
     }
-    // TODO: Return Error OutOfBounds.
+
+    std::string errorMessage;
+
+    errorMessage.append("Index ");
+    errorMessage.append(std::to_string(index));
+    errorMessage.append(" out of bounds for array size ");
+    errorMessage.append(std::to_string(m_values.size()));
+
+    return new JSONError(errorMessage);
 }
+
+uint64_t JSONArray::size() { return m_values.size(); }
 
 void JSONArray::print(uint64_t indent) {
     std::cout << "[ ";
@@ -90,7 +108,7 @@ JSONErrorOr<JSONString*> JSONValue::getString() {
         return m_value.m_string;
     }
 
-    // TODO: Return Error Its is not a String.
+    return new JSONError("Not a String");
 }
 
 JSONErrorOr<JSONNumber*> JSONValue::getNumber() {
@@ -98,7 +116,7 @@ JSONErrorOr<JSONNumber*> JSONValue::getNumber() {
         return m_value.m_number;
     }
 
-    // TODO: Return Error Its is not a Number.
+    return new JSONError("Not a Number");
 }
 
 JSONErrorOr<JSONObject*> JSONValue::getObject() {
@@ -106,7 +124,7 @@ JSONErrorOr<JSONObject*> JSONValue::getObject() {
         return m_value.m_object;
     }
 
-    // TODO: Return Error Its is not a Object.
+    return new JSONError("Not a Object");
 }
 
 JSONErrorOr<JSONArray*> JSONValue::getArray() {
@@ -114,7 +132,7 @@ JSONErrorOr<JSONArray*> JSONValue::getArray() {
         return m_value.m_array;
     }
 
-    // TODO: Return Error Its is not a Array.
+    return new JSONError("Not a Array");
 }
 
 JSONErrorOr<JSONBoolean*> JSONValue::getBoolean() {
@@ -122,7 +140,7 @@ JSONErrorOr<JSONBoolean*> JSONValue::getBoolean() {
         return m_value.m_boolean;
     }
 
-    // TODO: Return Error Its is not a Boolean.
+    return new JSONError("Not a Boolean");
 }
 
 JSONErrorOr<JSONNull*> JSONValue::getNull() {
@@ -130,7 +148,7 @@ JSONErrorOr<JSONNull*> JSONValue::getNull() {
         return m_value.m_null;
     }
 
-    // TODO: Return Error Its is not a Null.
+    return new JSONError("Not a Null");
 }
 
 bool JSONValue::isString() { return m_type == JSONValueType::STRING_T; }
@@ -203,47 +221,64 @@ JSONToken* JSONParser::next() {
 
 JSONErrorOr<JSONValue*> JSONParser::parse() {
     auto value = parseValue();
-    if (!value.isError()) {
-        m_value = value.value();
-    } else {
-        // TODO: Report Error
+    if (value.isError()) {
+        return value.error();
     }
+
+    if (current()->type() != JSONTokenType::_EOF) {
+        std::string errorMessage;
+
+        errorMessage.append("Unexpected token '");
+        errorMessage.append(current()->value());
+        errorMessage.append("' at position ");
+
+        return new JSONError(errorMessage, current()->pos());
+    }
+
+    m_value = value.value();
+
     return value;
 }
 
 JSONErrorOr<JSONObject*> JSONParser::parseObject() {
-    if (current()->type() != JSONTokenType::LEFT_CURLY_BRACE) {
-        // TODO: Report Error Expected '{';
-    }
+    // NOTE: parseObject is only being called when there is LEFT_CURLY_BRACE
+    // TOKEN '{'
+
     next();
     JSONObject* object = new JSONObject();
 
     while (current()->type() != JSONTokenType::RIGHT_CURLY_BRACE) {
         std::string key;
         if (current()->type() != JSONTokenType::STRING) {
-            // TODO: Report Error Expected '"';
+            return new JSONError(
+                "Expect double-quoted property name in JSON at position ",
+                current()->pos());
         }
         key = current()->value();
         next();
         if (current()->type() != JSONTokenType::COLON) {
-            // TODO: Report Error Expected ':';
+            return new JSONError("Expect ':' at position ", current()->pos());
         }
         next();
         JSONErrorOr<JSONValue*> value = parseValue();
         if (value.isError()) {
-            // TODO: Report Error.
+            return value.error();
         }
         object->set(key, value.value());
         if (current()->type() == JSONTokenType::COMMA) {
             next();
             if (current()->type() != JSONTokenType::STRING) {
-                // TODO: Report Error Expected '"';
+                return new JSONError(
+                    "Expect double-quoted property name in JSON at position ",
+                    current()->pos());
             }
+        } else {
+            break;
         }
     }
 
     if (current()->type() != JSONTokenType::RIGHT_CURLY_BRACE) {
-        // TODO: Report Error Expected '}';
+        return new JSONError("Expect '}' at position ", current()->pos());
     }
 
     next();
@@ -253,7 +288,7 @@ JSONErrorOr<JSONObject*> JSONParser::parseObject() {
 
 JSONErrorOr<JSONArray*> JSONParser::parseArray() {
     if (current()->type() != JSONTokenType::LEFT_SQUARE_BRACE) {
-        // TODO: Report Error Expected '[';
+        return new JSONError("Expect '[' at position ", current()->pos());
     }
     next();
     JSONArray* array = new JSONArray();
@@ -261,17 +296,22 @@ JSONErrorOr<JSONArray*> JSONParser::parseArray() {
     while (current()->type() != JSONTokenType::RIGHT_SQUARE_BRACE) {
         JSONErrorOr<JSONValue*> value = parseValue();
         if (value.isError()) {
-            // TODO: Report Error.
+            if (array->size() == 0) {
+                return new JSONError("Expect ']' at position ",
+                                     current()->pos());
+            }
+            return value.error();
         }
         array->append(value.value());
         if (current()->type() == JSONTokenType::COMMA) {
             next();
-            // TODO: Expect A JSONValue
+        } else {
+            break;
         }
     }
 
     if (current()->type() != JSONTokenType::RIGHT_SQUARE_BRACE) {
-        // TODO: Report Error Expected ']';
+        return new JSONError("Expect ']' at position ", current()->pos());
     }
 
     next();
@@ -284,6 +324,8 @@ JSONErrorOr<JSONValue*> JSONParser::parseValue() {
         auto object = parseObject();
         if (!object.isError()) {
             return new JSONValue(object.value());
+        } else {
+            return object.error();
         }
     }
 
@@ -321,12 +363,17 @@ JSONErrorOr<JSONValue*> JSONParser::parseValue() {
             return new JSONValue(null_.value());
         }
     }
-    // TODO: Report Error Invalid Token.
+
+    std::string errorMessage;
+    errorMessage.append("Unexpected Token '");
+    errorMessage.append(current()->value());
+    errorMessage.append("' at position ");
+    return new JSONError(errorMessage, current()->pos());
 }
 
 JSONErrorOr<JSONString*> JSONParser::parseString() {
     if (current()->type() != JSONTokenType::STRING) {
-        // TODO: Report Error Expected '"'.
+        return new JSONError("Expect '\"' at position ", current()->pos());
     }
 
     JSONString* string = new JSONString(current()->value());
@@ -337,11 +384,8 @@ JSONErrorOr<JSONString*> JSONParser::parseString() {
 }
 
 JSONErrorOr<JSONNumber*> JSONParser::parseNumber() {
-    if (current()->type() != JSONTokenType::NUMBER) {
-        // TODO: Report Error Expected Number.
-    }
+    // NOTE: parseNumber is only being called when there is NUMBER Token.
 
-    // TODO: Convert it to double
     std::string::size_type sz;
     double value = std::stod(current()->value(), &sz);
     JSONNumber* number = new JSONNumber(value);
@@ -352,9 +396,8 @@ JSONErrorOr<JSONNumber*> JSONParser::parseNumber() {
 }
 
 JSONErrorOr<JSONBoolean*> JSONParser::parseBoolean() {
-    if (current()->type() != JSONTokenType::BOOLEAN) {
-        // TODO: Report Error Expected Boolean.
-    }
+    // NOTE: parseBoolean is only being called when there is BOOLEAN Token
+    // 'true' or 'false'.
 
     JSONBoolean* boolean =
         new JSONBoolean(current()->value() == "true" ? true : false);
@@ -365,9 +408,7 @@ JSONErrorOr<JSONBoolean*> JSONParser::parseBoolean() {
 }
 
 JSONErrorOr<JSONNull*> JSONParser::parseNull() {
-    if (current()->type() != JSONTokenType::NULL_) {
-        // TODO: Report Error Expected Boolean.
-    }
+    // NOTE: parseBoolean is only being called when there is NULL_ Token 'null'.
     next();
 
     return new JSONNull();

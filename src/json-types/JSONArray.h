@@ -12,6 +12,7 @@ class JSONArray {
    public:
     void append(JSONValue* value);
     JSONErrorOr<JSONValue*> get(uint64_t index);
+    uint64_t size();
 
     void print(uint64_t indent);
 };
